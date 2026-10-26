@@ -32,18 +32,29 @@ console.log('Login eseguito.');
 
 const p2 = n => String(n).padStart(2, '0');
 const fmt = d => `${d.getUTCFullYear()}-${p2(d.getUTCMonth() + 1)}-${p2(d.getUTCDate())} ${p2(d.getUTCHours())}:${p2(d.getUTCMinutes())}:${p2(d.getUTCSeconds())}`;
-const fine = new Date(), inizio = new Date(fine.getTime() - 24 * 3600000);
+const adesso = new Date();
+const inizio = new Date(adesso.getTime() - 6 * 3600000), fine = new Date(adesso.getTime() + 4 * 3600000);   // finestra fino a 4 h nel futuro: mostra qual è l'ultimo dato disponibile
+console.log(`Ora di esecuzione: ${adesso.toISOString()} (UTC) · richiesta da ${fmt(inizio)} a ${fmt(fine)} (le date sono interpretate dal servizio: si confronta con le ore restituite)`);
+const H = { headers: { Authorization: 'Bearer ' + token, Accept: 'application/json' } };
 const risultato = {};
-for (const [tipo, nome, stazioni] of [[2, 'PIOGGIA', PIOGGIA], [6, 'LIVELLO', LIVELLO]]) {
-  const q = new URLSearchParams({ stationIDs: Object.keys(stazioni).join(','), startDate: fmt(inizio), endDate: fmt(fine), format: 'JSON' });
+const riepilogo = (nome, r) => {
+  if (!Array.isArray(r)) { console.log(nome + ': risposta non è un elenco: ' + JSON.stringify(r).slice(0, 300)); return; }
+  const per = {};
+  r.forEach(x => { (per[x.idstazione] = per[x.idstazione] || []).push(x); });
+  Object.keys(per).forEach(id => {
+    const d = per[id], u = d[d.length - 1], somma = d.reduce((a, x) => a + (+x.valore || 0), 0), max = d.reduce((a, x) => Math.max(a, +x.valore || 0), 0);
+    console.log(`  stazione ${id}: ${d.length} letture, prima ${d[0].dataora}, ultima ${u.dataora} = ${u.valore} · somma ${somma.toFixed(3)} · massimo ${max}`);
+  });
+};
+for (const [tipo, nome, stazioni, extra] of [[2, 'PIOGGIA al minuto', PIOGGIA, {}], [2, 'PIOGGIA aggregata per ORA', PIOGGIA, { aggregationInterval: 'HOUR' }], [6, 'LIVELLO', LIVELLO, {}]]) {
+  const q = new URLSearchParams({ stationIDs: Object.keys(stazioni).join(','), startDate: fmt(inizio), endDate: fmt(fine), format: 'JSON', ...extra });
   try {
-    const r = await chiama(`/api/measures/${tipo}?${q}`, { headers: { Authorization: 'Bearer ' + token, Accept: 'application/json' } });
+    const r = await chiama(`/api/measures/${tipo}?${q}`, H);
     risultato[nome] = r;
-    const testo = JSON.stringify(r);
-    console.log(`\n${nome} (tipo ${tipo}) · richiesta da ${fmt(inizio)} a ${fmt(fine)} (UTC) · ${testo.length} caratteri`);
-    console.log('Inizio risposta: ' + testo.slice(0, 1200));
-    console.log('Fine risposta: ' + testo.slice(-500));
-  } catch (e) { console.log(`\n${nome} (tipo ${tipo}): errore ${e.message}`); }
+    console.log(`\n${nome} (tipo ${tipo})`);
+    riepilogo(nome, r);
+    if (extra.aggregationInterval) console.log('  esempio: ' + JSON.stringify(r).slice(0, 500));
+  } catch (e) { console.log(`\n${nome}: errore ${e.message}`); }
 }
 mkdirSync(OUT, { recursive: true });
 writeFileSync(`${OUT}/misure-prova.json`, JSON.stringify(risultato, null, 1));
