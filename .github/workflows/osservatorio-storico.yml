@@ -1,0 +1,29 @@
+name: Analisi storico Osservatorio Alpi Orientali
+
+# Avvio solo manuale. Scarica i livelli passati, trova le piene e stampa nel log un riassunto dei tempi di viaggio.
+# Non salva e non pubblica i dati scaricati.
+on:
+  workflow_dispatch:
+    inputs:
+      anni:
+        description: 'Quanti anni indietro analizzare (massimo)'
+        default: '8'
+
+permissions:
+  contents: read
+
+jobs:
+  storico:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Analizza lo storico
+        run: node scripts/osservatorio-storico.mjs
+        env:
+          OSSERVATORIO_USER: ${{ secrets.OSSERVATORIO_USER }}
+          OSSERVATORIO_PASSWORD: ${{ secrets.OSSERVATORIO_PASSWORD }}
+          ANNI_MAX: ${{ inputs.anni }}
