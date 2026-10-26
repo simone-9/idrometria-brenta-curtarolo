@@ -1,0 +1,23 @@
+{
+ "aggiornato": "2026-10-26T16:50:43.242Z",
+ "note": "Orari in UTC. Dati ARPAV Veneto (CC BY 4.0), automatici e non validati. La pioggia è la cumulata giornaliera dalla mezzanotte solare.",
+ "stazioni": {
+  "300005751": "Brenta a Barzizza (Bassano del Grappa)",
+  "300005777": "Brenta a Limena (Curtarolo)",
+  "300005833": "Brenta a Stra (Vigonovo, a valle)",
+  "300005949": "Brenta a Ponte Filippini (Grigno, TN)",
+  "300005953": "Brenta a Borgo Valsugana (TN)",
+  "300006028": "Brenta a Enego",
+  "300011312": "Brenta a Maso della Costa (Caldonazzo, TN)",
+  "300011331": "Cismon a Fiera di Primiero (TN, affluente)",
+  "300011337": "Brenta a Levico, Ponte Cervia (TN)",
+  "300011350": "Brenta a Ospedaletto (TN)",
+  "300011353": "Brenta a Ponte Zaccon (Roncegno, TN)",
+  "300015468": "Brenta a Vigonovo (a valle)"
+ },
+ "pluviometri": {
+  "300005763": "Castelfranco Veneto (Muson dei Sassi)",
+  "300005808": "Vicenza S. Agostino (Retrone)",
+  "300016778": "Padova Voltabarozzo (Bacchiglione)"
+ }
+}
