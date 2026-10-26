@@ -74,3 +74,6 @@ Ad ogni esecuzione, al massimo una volta ogni 6 ore, i dati ARPAV letti (livello
 `dati/<id-stazione>/AAAA-MM.csv` (istante UTC, livello in m, portata in m³/s) e `dati/pioggia-<id>/AAAA-MM.csv` (pioggia cumulata giornaliera in mm). `indice.json` elenca i nomi delle stazioni.
 Il file ARPAV contiene solo le ultime 48 ore, quindi basta che il flusso giri almeno una volta ogni 2 giorni per non perdere nulla. Serve a calibrare in futuro il tempo di viaggio della piena da Barzizza a Limena con piene reali.
 I dati dell'Osservatorio non vengono archiviati (sono scaricabili a richiesta dal loro storico). I dati ARPAV sono CC BY 4.0, automatici e non validati.
+
+### Analisi dell'archivio
+Actions → «Analisi archivio ARPAV» → Run workflow. Il log mostra la copertura dei dati, le piene trovate (salita ≥ 0,4 m a Barzizza) con il ritardo a Limena e, con almeno 5 piene utilizzabili, il tempo di viaggio e il coefficiente suggeriti per le «Impostazioni della stima» dell'app. Con meno piene dice di lasciare la stima spenta.

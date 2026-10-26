@@ -1,0 +1,25 @@
+name: Analisi archivio ARPAV
+
+# Avvio solo manuale. Legge il ramo "archivio" e stampa nel log: copertura dei dati, piene trovate a Barzizza e Limena e,
+# se ci sono almeno 5 piene utilizzabili, il tempo di viaggio e il coefficiente da inserire nelle impostazioni della stima.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  analisi:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: archivio
+          path: archivio
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Analizza l'archivio
+        run: node scripts/analisi-archivio.mjs archivio
