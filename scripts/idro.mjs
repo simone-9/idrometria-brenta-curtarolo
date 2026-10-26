@@ -224,7 +224,7 @@ writeFileSync(`${OUT}/idro.json`, JSON.stringify({ v: 1, run: dati.run, aggiorna
 const puoInviare = DRY || (TOKEN && CHAT);
 if (!puoInviare) console.log('::warning::Mancano i segreti TELEGRAM_BOT_TOKEN e TELEGRAM_CHAT_ID: nessun avviso inviato.');
 let problemi = 0;
-let pushAttivo = false; try { pushAttivo = !!chiaveServizio(); } catch (e) { console.log('::warning::' + e.message); }
+let pushAttivo = false; try { const ks = chiaveServizio(); pushAttivo = !!ks; console.log(ks ? `Push: attive (progetto ${ks.project_id})` : '::warning::Push NON attive: il segreto FIREBASE_SERVICE_ACCOUNT è vuoto o non esiste (controlla il nome e di averlo salvato in Settings → Secrets and variables → Actions)'); } catch (e) { console.log('::warning::' + e.message); }
 stato.push = stato.push && typeof stato.push === 'object' ? stato.push : {};
 
 for (const s of cfg.stazioni.filter(x => x.allerta)) {
