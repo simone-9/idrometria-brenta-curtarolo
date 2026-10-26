@@ -93,5 +93,62 @@
       "id": "300005808",
       "nome": "Vicenza S. Agostino (Retrone)"
     }
-  ]
+  ],
+  "osservatorio": {
+    "_nota": "Osservatorio delle Alpi Orientali (API Export Data, serve account). Per spegnere la lettura metti attivo a false. I dati sono in ora solare; la pioggia arriva al minuto e viene sommata ogni 10 minuti.",
+    "attivo": true,
+    "base": "https://www.amicoalpiorientali.eu/CoDataService",
+    "livello": [
+      {
+        "id": 1154,
+        "nome": "Brenta a Campo San Martino"
+      },
+      {
+        "id": 1167,
+        "nome": "Cismon a Cismon del Grappa"
+      },
+      {
+        "id": 1155,
+        "nome": "Cismon a Fonzaso"
+      },
+      {
+        "id": 1173,
+        "nome": "Valgadena a Valstagna"
+      }
+    ],
+    "pioggia": [
+      {
+        "id": 1174,
+        "nome": "Arsiè"
+      },
+      {
+        "id": 1172,
+        "nome": "San Nazario (Valsugana)"
+      },
+      {
+        "id": 1157,
+        "nome": "Foza (Altopiano)"
+      },
+      {
+        "id": 10179,
+        "nome": "Rubbio (Altopiano)"
+      },
+      {
+        "id": 1167,
+        "nome": "Cismon del Grappa"
+      },
+      {
+        "id": 1198,
+        "nome": "Gallio Campomulo (Altopiano)"
+      },
+      {
+        "id": 1206,
+        "nome": "Tresché Conca (Altopiano)"
+      },
+      {
+        "id": 1200,
+        "nome": "Malga Portule (Altopiano)"
+      }
+    ]
+  }
 }

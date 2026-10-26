@@ -143,6 +143,56 @@ function leggiBollettino(t, zone) {
   return { doc: doc ? `${doc[1]}/${doc[2]}` : '', emissione, giorni, fenomeni: blocco('FENOMENI PREVISTI', 'TENDENZA'), tendenza: blocco('TENDENZA', 'Agenzia Regionale'), classi: CLASSI_PIOGGIA, zone: cfg.bollettino.zone };
 }
 
+
+// ---------- Osservatorio delle Alpi Orientali: livelli e pioggia nel bacino del Brenta (serve account, segreti OSSERVATORIO_*) ----------
+async function osservatorio(c) {
+  if (!c || !c.attivo) return null;
+  const utente = process.env.OSSERVATORIO_USER, pw = process.env.OSSERVATORIO_PASSWORD;
+  if (!utente || !pw) { console.log('Osservatorio: segreti non impostati, lettura saltata.'); return null; }
+  const base = (process.env.OSSERVATORIO_BASE || c.base).replace(/\/$/, '');
+  const chiama = async (percorso, opz = {}) => {
+    let err;
+    for (let i = 0; i < 3; i++) {
+      try {
+        const r = await fetch(base + percorso, { ...opz, signal: AbortSignal.timeout(90000) });
+        const t = await r.text();
+        if ([502, 503, 504].includes(r.status)) { err = new Error(`${percorso.split('?')[0]}: risposta ${r.status}`); await new Promise(x => setTimeout(x, 4000 * (i + 1))); continue; }
+        if (!r.ok) throw Object.assign(new Error(`${percorso.split('?')[0]}: risposta ${r.status}`), { definitivo: true });
+        try { return JSON.parse(t); } catch { return t; }
+      } catch (e) { if (e.definitivo) throw e; err = e; await new Promise(x => setTimeout(x, 4000 * (i + 1))); }
+    }
+    throw err;
+  };
+  const fd = new FormData(); fd.append('userName', utente); fd.append('password', pw);
+  const r0 = await chiama('/api/Auth/login', { method: 'POST', body: fd });
+  const token = String(typeof r0 === 'string' ? r0 : (r0.token || '')).replace(/^"|"$/g, '').replace(/^Bearer\s+/i, '').trim();
+  if (!token) throw new Error('token non ottenuto');
+  const H = { headers: { Authorization: 'Bearer ' + token, Accept: 'application/json' } };
+  const p2 = n => String(n).padStart(2, '0');
+  const fmt = ms => { const d = new Date(ms); return `${d.getUTCFullYear()}-${p2(d.getUTCMonth() + 1)}-${p2(d.getUTCDate())} ${p2(d.getUTCHours())}:${p2(d.getUTCMinutes())}:${p2(d.getUTCSeconds())}`; };
+  const solare = Date.now() + 3600000;   // le date del servizio sono in ora solare (UTC+1), come ARPAV
+  const dt = s => { const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(String(s)); return m ? Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]) - 3600000 : NaN; };
+  const scarica = async (tipo, lista, ore) => {
+    const q = new URLSearchParams({ stationIDs: lista.map(x => x.id).join(','), startDate: fmt(solare - ore * 3600000), endDate: fmt(solare + 3600000), format: 'JSON' });
+    const r = await chiama(`/api/measures/${tipo}?${q}`, H);
+    if (!Array.isArray(r)) throw new Error('risposta non valida per il tipo ' + tipo);
+    const per = {};
+    for (const x of r) { const t = dt(x.dataora), v = +x.valore; if (isFinite(t) && isFinite(v)) (per[x.idstazione] = per[x.idstazione] || []).push([t, v]); }
+    return per;
+  };
+  const liv = await scarica(6, c.livello, 48), pio = await scarica(2, c.pioggia, 30);
+  const out = { aggiornato: new Date().toISOString(), livello: {}, pioggia: {} };
+  for (const s of c.livello) if (liv[s.id]) out.livello[s.id] = { nome: s.nome, dati: liv[s.id].sort((a, b) => a[0] - b[0]) };
+  for (const s of c.pioggia) {
+    const d = pio[s.id]; if (!d) continue;
+    d.sort((a, b) => a[0] - b[0]);
+    const B = 600000, bucket = {};                      // somma ogni 10 minuti (fine intervallo)
+    for (const [t, v] of d) { const k = Math.ceil(t / B) * B; bucket[k] = (bucket[k] || 0) + v; }
+    out.pioggia[s.id] = { nome: s.nome, ultimo: d[d.length - 1][0], dati: Object.keys(bucket).map(Number).sort((a, b) => a - b).map(k => [k, Math.round(bucket[k] * 100) / 100]) };
+  }
+  return out;
+}
+
 const xml = await scarica();
 const dati = leggi(xml);
 mkdirSync(OUT, { recursive: true });
@@ -160,7 +210,15 @@ try {
   console.log('::warning::Bollettino meteo non letto: ' + (e && e.message ? e.message : e));
   if (stato.meteo) meteo = Object.assign({}, stato.meteo, { nonAggiornato: true });
 }
-writeFileSync(`${OUT}/idro.json`, JSON.stringify({ v: 1, run: dati.run, aggiornato: new Date().toISOString(), fonte: 'ARPAV Veneto, rete idrografica (CC BY 4.0), dati non validati', st: dati.st, pl: dati.pl, meteo }));
+let os = null;
+try {
+  os = await osservatorio(cfg.osservatorio);
+  if (os) stato.os = os;
+} catch (e) {
+  console.log('::warning::Osservatorio Alpi Orientali non letto: ' + (e && e.message ? e.message : e));
+  if (stato.os) os = Object.assign({}, stato.os, { nonAggiornato: true });
+}
+writeFileSync(`${OUT}/idro.json`, JSON.stringify({ v: 1, run: dati.run, aggiornato: new Date().toISOString(), fonte: 'ARPAV Veneto, rete idrografica (CC BY 4.0), dati non validati', st: dati.st, pl: dati.pl, meteo, os }));
 
 const puoInviare = DRY || (TOKEN && CHAT);
 if (!puoInviare) console.log('::warning::Mancano i segreti TELEGRAM_BOT_TOKEN e TELEGRAM_CHAT_ID: nessun avviso inviato.');

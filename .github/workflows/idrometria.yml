@@ -41,6 +41,8 @@ jobs:
         run: node scripts/idro.mjs
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          OSSERVATORIO_USER: ${{ secrets.OSSERVATORIO_USER }}
+          OSSERVATORIO_PASSWORD: ${{ secrets.OSSERVATORIO_PASSWORD }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TEST_MESSAGGIO: ${{ inputs.prova && '1' || '' }}
 
