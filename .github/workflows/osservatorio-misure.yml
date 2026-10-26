@@ -1,0 +1,27 @@
+name: Prova misure Osservatorio Alpi Orientali
+
+# Avvio solo manuale: scarica le ultime 24 ore di pioggia e livello di alcune stazioni e le mostra nel log. Non pubblica nulla.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  misure:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Scarica misure di prova
+        run: node scripts/osservatorio-misure.mjs
+        env:
+          OSSERVATORIO_USER: ${{ secrets.OSSERVATORIO_USER }}
+          OSSERVATORIO_PASSWORD: ${{ secrets.OSSERVATORIO_PASSWORD }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: misure-prova
+          path: out-osservatorio/misure-prova.json
+          retention-days: 7
