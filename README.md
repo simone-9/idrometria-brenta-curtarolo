@@ -31,3 +31,40 @@ I dati ARPAV sono automatici e non validati: gli avvisi sono un aiuto per la sal
 
 ## Bollettino di vigilanza meteorologica (pioggia)
 Ad ogni esecuzione lo script cerca sulla pagina del CFD Veneto il bollettino BVM più recente, ne legge le classi di pioggia delle zone B2, B3, E1 (configurabili in `config/stazioni.json`) e le pubblica in `idro.json`. Se il bollettino non si legge, l'esecuzione non fallisce: l'app mostra l'ultimo letto con un avviso.
+
+## Avvio con un servizio esterno di cron (cron-job.org)
+La pianificazione interna di GitHub (`schedule`) può ritardare o saltare le esecuzioni. Un servizio esterno che chiama GitHub ogni 10 minuti è più puntuale.
+Il flusso `Idrometria Brenta` si può già avviare dall'esterno (`workflow_dispatch`): non serve cambiare nulla nel codice. La pianificazione interna resta come riserva;
+se due avvii arrivano insieme, il blocco `concurrency` del flusso li mette in fila.
+
+### 1. Crea un token GitHub con il minimo dei permessi
+1. GitHub → foto profilo → Settings → Developer settings → Personal access tokens → **Fine-grained tokens** → Generate new token.
+2. Nome: `cron idrometria`. Scadenza: la più lunga consentita (annotati la data per rinnovarlo).
+3. Repository access: **Only select repositories** → solo `idrometria-brenta-curtarolo`.
+4. Permissions → Repository permissions → **Actions: Read and write** (nient'altro).
+5. Generate e copia il token (inizia per `github_pat_`). Non scriverlo in chat né nel codice: va solo nel servizio di cron.
+
+### 2. Crea il lavoro su cron-job.org
+1. Registrati su https://cron-job.org e crea un lavoro ("Create cronjob").
+2. **URL**: `https://api.github.com/repos/simone-9/idrometria-brenta-curtarolo/actions/workflows/idrometria.yml/dispatches`
+3. **Schedule**: ogni 10 minuti.
+4. In *Advanced*:
+   - Request method: **POST**
+   - Headers (3 righe):
+     - `Authorization`: `Bearer <il tuo token>`
+     - `Accept`: `application/vnd.github+json`
+     - `X-GitHub-Api-Version`: `2022-11-28`
+   - Request body: `{"ref":"main"}`
+   - Header `Content-Type`: `application/json`
+5. Salva e premi "Test run": la risposta corretta è **HTTP 204** (nessun contenuto). Poi controlla in Actions che sia partita un'esecuzione con evento `workflow_dispatch`.
+6. Attiva le notifiche di errore del lavoro: se il token scade o GitHub rifiuta la chiamata (401/403/404), cron-job.org ti avvisa.
+
+### Codici di risposta
+- 204: avvio accettato.
+- 401/403: token sbagliato, scaduto o senza il permesso «Actions: Read and write».
+- 404: nome del repository o del file `idrometria.yml` sbagliato, oppure il token non vede il repository.
+- 422: il ramo indicato in `ref` non esiste.
+
+### Da sapere
+- I minuti di Actions dei repository pubblici sono gratuiti, quindi 144 avvii al giorno non hanno costo.
+- Il token dà accesso solo alle Actions di questo repository, ma va trattato come una password: se pensi sia stato visto, revocalo da GitHub e creane uno nuovo.
