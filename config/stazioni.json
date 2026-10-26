@@ -79,5 +79,19 @@
         "nome": "Pianura centrale (Curtarolo)"
       }
     ]
-  }
+  },
+  "pluviometri": [
+    {
+      "id": "300016778",
+      "nome": "Padova Voltabarozzo (Bacchiglione)"
+    },
+    {
+      "id": "300005763",
+      "nome": "Castelfranco Veneto (Muson dei Sassi)"
+    },
+    {
+      "id": "300005808",
+      "nome": "Vicenza S. Agostino (Retrone)"
+    }
+  ]
 }

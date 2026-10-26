@@ -64,7 +64,13 @@ function leggi(xml) {
     const q = s.portata ? sensore(xml, s.portata) : null;
     st[s.id] = { nome: s.nome, g: l.g, dati: l.dati, q: q ? q.dati : [], qu: q ? (q.unita || 'm³/s').replace('m3', 'm³') : '' };
   }
-  return { run, st };
+  // pluviometri: pioggia cumulata (mm) dalla mezzanotte solare, ogni 30 minuti
+  const pl = {};
+  for (const s of cfg.pluviometri || []) {
+    const l = sensore(xml, s.id);
+    if (l) pl[s.id] = { nome: s.nome, dati: l.dati };
+  }
+  return { run, st, pl };
 }
 
 const portataRiga = d => {
@@ -154,7 +160,7 @@ try {
   console.log('::warning::Bollettino meteo non letto: ' + (e && e.message ? e.message : e));
   if (stato.meteo) meteo = Object.assign({}, stato.meteo, { nonAggiornato: true });
 }
-writeFileSync(`${OUT}/idro.json`, JSON.stringify({ v: 1, run: dati.run, aggiornato: new Date().toISOString(), fonte: 'ARPAV Veneto, rete idrografica (CC BY 4.0), dati non validati', st: dati.st, meteo }));
+writeFileSync(`${OUT}/idro.json`, JSON.stringify({ v: 1, run: dati.run, aggiornato: new Date().toISOString(), fonte: 'ARPAV Veneto, rete idrografica (CC BY 4.0), dati non validati', st: dati.st, pl: dati.pl, meteo }));
 
 const puoInviare = DRY || (TOKEN && CHAT);
 if (!puoInviare) console.log('::warning::Mancano i segreti TELEGRAM_BOT_TOKEN e TELEGRAM_CHAT_ID: nessun avviso inviato.');
