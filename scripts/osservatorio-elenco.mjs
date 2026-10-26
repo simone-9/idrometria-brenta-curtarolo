@@ -11,16 +11,24 @@ const BOX = { latMin: 45.35, latMax: 46.25, lonMin: 11.15, lonMax: 12.0 };
 if (!USER || !PASS) { console.error('Mancano i segreti OSSERVATORIO_USER / OSSERVATORIO_PASSWORD.'); process.exit(1); }
 
 async function chiama(percorso, opz = {}) {
-  const r = await fetch(BASE + percorso, { ...opz, signal: AbortSignal.timeout(60000) });
-  const t = await r.text();
-  if (!r.ok) throw new Error(`${percorso}: risposta ${r.status} ${t.slice(0, 200).replace(/\s+/g, ' ')}`);
-  try { return JSON.parse(t); } catch { return t; }
+  let errore;
+  for (let i = 0; i < 4; i++) {   // 502/503/504 possono essere momentanei: si riprova con pause crescenti
+    try {
+      const r = await fetch(BASE + percorso, { ...opz, signal: AbortSignal.timeout(60000) });
+      const t = await r.text();
+      if ([502, 503, 504].includes(r.status)) { errore = new Error(`${percorso}: risposta ${r.status} (tentativo ${i + 1} di 4)`); await new Promise(x => setTimeout(x, 5000 * (i + 1))); continue; }
+      if (!r.ok) throw new Error(`${percorso}: risposta ${r.status} ${t.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').slice(0, 150)}`);
+      try { return JSON.parse(t); } catch { return t; }
+    } catch (e) { if (/risposta 4\d\d/.test(String(e.message))) throw e; errore = e; await new Promise(x => setTimeout(x, 5000 * (i + 1))); }
+  }
+  throw errore;
 }
 const get = (p, tok) => chiama(p, { headers: { Authorization: 'Bearer ' + tok, Accept: 'application/json' } });
 
 const fd = new FormData(); fd.append('userName', USER); fd.append('password', PASS);
 const risp = await chiama('/api/Auth/login', { method: 'POST', body: fd });
-const token = typeof risp === 'string' ? risp.replace(/^"|"$/g, '') : (risp.token || risp.accessToken || risp.access_token || risp.jwt || '');
+let token = typeof risp === 'string' ? risp.replace(/^"|"$/g, '') : (risp.token || risp.accessToken || risp.access_token || risp.jwt || '');
+token = String(token).replace(/^Bearer\s+/i, '').trim();   // il servizio risponde già «Bearer <token>»
 if (!token) { console.error('Login riuscito ma token non riconosciuto. Chiavi della risposta: ' + (typeof risp === 'object' ? Object.keys(risp).join(', ') : typeof risp)); process.exit(1); }
 console.log('Login eseguito.');
 
