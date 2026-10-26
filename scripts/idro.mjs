@@ -5,7 +5,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, mkdtempSync } from 
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { inviaPush, chiaveServizio } from './push.mjs';
+import { inviaPush, chiaveServizio, leggiCollezione } from './push.mjs';
 
 const SORGENTE = process.env.IDRO_SOURCE_URL || 'https://www.arpa.veneto.it/api/risorse/data-meteo/xml/Ultime48ore.xml';
 const FILE_PROVA = process.env.IDRO_SOURCE_FILE || '';
@@ -285,6 +285,30 @@ for (const s of cfg.stazioni.filter(x => x.allerta)) {
     const sogliaPrec = d.g[prec - 1];
     if (sogliaPrec == null || v < sogliaPrec - (cfg.isteresi ?? 0.05)) stato[s.id] = liv;   // rientrata: si riarma l'avviso
   }
+}
+// notifica push quando sale il livello dell'allerta CFD (zona E1) per oggi o domani: legge lo storico scritto dal monitoraggio automatico
+if (pushAttivo && !PROVA && !PROVA_PUSH) {
+  try {
+    const RANGO = { VERDE: 0, GIALLA: 1, ARANCIONE: 2, ROSSA: 3 };
+    const dmy = d => { const p = Object.fromEntries(new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', day: 'numeric', month: 'numeric', year: 'numeric' }).formatToParts(d).map(x => [x.type, x.value])); return `${+p.day}/${+p.month}/${p.year}`; };
+    const norm = s => { const m = String(s || '').match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/); return m ? `${+m[1]}/${+m[2]}/${m[3]}` : ''; };
+    const giorni = [[dmy(new Date()), 'oggi'], [dmy(new Date(Date.now() + 86400000)), 'domani']];
+    const righe = (await leggiCollezione('allerte_cfd_veneto')) || [];
+    const cfd = stato.push.cfd && typeof stato.push.cfd === 'object' ? stato.push.cfd : {}, primo = !stato.push.cfdInit, nuovo = {};
+    for (const [data, quando] of giorni) {
+      const ult = righe.map(r => r.campi).filter(c => norm(c.data) === data && c.fonte && RANGO[c.livello] != null).sort((a, b) => String(b.timestamp).localeCompare(String(a.timestamp)))[0];
+      if (!ult) continue;
+      const rango = RANGO[ult.livello];
+      const prec = cfd[data] != null ? cfd[data] : 0;
+      if (!primo && rango > prec) {
+        const att = Object.values(ult.rischi || {}).filter(v => v && v.livello && v.livello !== 'VERDE').map(v => `${v.nome}: ${v.livello}`);
+        const e = await inviaPush({ titolo: `Allerta ${ult.livello} per ${quando}`, testo: `Zona E1 Curtarolo${att.length ? ' · ' + att.join(', ') : ''}`, tag: `cfd-${data.replace(/\//g, '-')}-${rango}`, icona: '⚠️' });
+        console.log(`Push allerta CFD ${ult.livello} (${quando}): ${e.inviati}/${e.dispositivi} dispositivi`);
+      }
+      cfd[data] = rango; nuovo[data] = rango; stato.push.cfd = cfd;   // livello sceso: si aggiorna senza avvisare
+    }
+    stato.push.cfd = nuovo; stato.push.cfdInit = true;
+  } catch (e) { console.log('::warning::Controllo allerte CFD per le push non riuscito: ' + e.message); }
 }
 writeFileSync(fileStato, JSON.stringify(stato));
 if (problemi) process.exitCode = 1;

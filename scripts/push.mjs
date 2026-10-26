@@ -43,7 +43,7 @@ export async function inviaPush(msg, opzioni = {}) {
   for (const d of dispositivi) {
     const r = await f(`https://fcm.googleapis.com/v1/projects/${k.project_id}/messages:send`, {
       method: 'POST', headers: { authorization: 'Bearer ' + tok, 'content-type': 'application/json' },
-      body: JSON.stringify({ message: { token: d.token, data: { titolo: String(msg.titolo), testo: String(msg.testo), tag: String(msg.tag || 'idro'), url: './' }, webpush: { headers: { Urgency: 'high', TTL: '3600' } }, android: { priority: 'HIGH' } } })
+      body: JSON.stringify({ message: { token: d.token, data: { titolo: String(msg.titolo), testo: String(msg.testo), tag: String(msg.tag || 'idro'), icona: String(msg.icona || ''), url: './' }, webpush: { headers: { Urgency: 'high', TTL: '3600' } }, android: { priority: 'HIGH' } } })
     });
     if (r.ok) { inviati++; continue; }
     const t = await r.text().catch(() => '');
@@ -53,4 +53,31 @@ export async function inviaPush(msg, opzioni = {}) {
     } else console.log('::warning::Push non inviato (' + r.status + '): ' + t.slice(0, 160));
   }
   return { dispositivi: dispositivi.length, inviati, rimossi };
+}
+
+// Legge una raccolta di Firestore (con l'account di servizio) e ritorna [{ id, campi }] con i valori già convertiti.
+function daFs(v) {
+  if (v == null) return null;
+  if ('stringValue' in v) return v.stringValue;
+  if ('integerValue' in v) return Number(v.integerValue);
+  if ('doubleValue' in v) return v.doubleValue;
+  if ('booleanValue' in v) return v.booleanValue;
+  if ('timestampValue' in v) return v.timestampValue;
+  if ('nullValue' in v) return null;
+  if ('mapValue' in v) return Object.fromEntries(Object.entries(v.mapValue.fields || {}).map(([k, x]) => [k, daFs(x)]));
+  if ('arrayValue' in v) return (v.arrayValue.values || []).map(daFs);
+  return null;
+}
+export async function leggiCollezione(coll, opzioni = {}) {
+  const f = opzioni.fetch || fetch, k = chiaveServizio(opzioni.env || process.env);
+  if (!k) return null;
+  const tok = await accessToken(k, f), out = []; let pag = '';
+  do {
+    const r = await f(`https://firestore.googleapis.com/v1/projects/${k.project_id}/databases/(default)/documents/${coll}?pageSize=300${pag}`, { headers: { authorization: 'Bearer ' + tok } });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(`Lettura di ${coll} non riuscita (${r.status}): ` + JSON.stringify(j).slice(0, 200));
+    (j.documents || []).forEach(d => out.push({ id: d.name.split('/').pop(), campi: daFs({ mapValue: { fields: d.fields || {} } }) }));
+    pag = j.nextPageToken ? '&pageToken=' + encodeURIComponent(j.nextPageToken) : '';
+  } while (pag);
+  return out;
 }

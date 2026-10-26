@@ -88,4 +88,6 @@ Una tantum, nella console Firebase del progetto:
 2. **Impostazioni progetto → Account di servizio → Genera nuova chiave privata.** Si scarica un file JSON: incollane **tutto il contenuto** nel segreto GitHub `FIREBASE_SERVICE_ACCOUNT` (Settings → Secrets and variables → Actions). Non condividerlo e non metterlo in chat o nel repository: dà accesso al progetto.
 3. Ripubblica le regole di `firestore.rules` (nuova raccolta `push_dispositivi`) e pubblica la nuova versione dell'app/PWA con `push-handler.js`.
 
-Ogni utente, al primo tocco dopo l'accesso, vede la richiesta di consenso alle notifiche. Il lancio manuale con «prova» invia anche una notifica push di prova. I dispositivi non più validi vengono tolti da soli.
+Ogni utente, al primo tocco dopo l'accesso, vede la richiesta di consenso alle notifiche. Il lancio manuale con «prova_push» invia solo una notifica push di prova. I dispositivi non più validi vengono tolti da soli.
+
+La push parte anche quando sale il livello dell'**allerta CFD** (zona E1) per oggi o domani: il servizio legge lo storico scritto dal monitoraggio automatico (raccolta `allerte_cfd_veneto`) e avvisa solo se il livello aumenta rispetto all'ultimo controllo.
