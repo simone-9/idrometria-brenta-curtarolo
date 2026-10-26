@@ -28,3 +28,6 @@ I dati ARPAV sono automatici e non validati: gli avvisi sono un aiuto per la sal
 - Per cambiare soglie o stazioni di allerta: `config/stazioni.json` (`"allerta": true`).
 - Prova senza inviare: `TELEGRAM_DRY_RUN=1 node scripts/idro.mjs`.
 - **Messaggio di prova su Telegram**: scheda *Actions* → *Idrometria Brenta* → *Run workflow*, spunta *Invia un messaggio Telegram di PROVA* e avvia. Arrivano due messaggi (Barzizza e Limena) con il livello attuale, marcati come simulazione; lo stato degli avvisi reali non cambia.
+
+## Bollettino di vigilanza meteorologica (pioggia)
+Ad ogni esecuzione lo script cerca sulla pagina del CFD Veneto il bollettino BVM più recente, ne legge le classi di pioggia delle zone B2, B3, E1 (configurabili in `config/stazioni.json`) e le pubblica in `idro.json`. Se il bollettino non si legge, l'esecuzione non fallisce: l'app mostra l'ultimo letto con un avviso.

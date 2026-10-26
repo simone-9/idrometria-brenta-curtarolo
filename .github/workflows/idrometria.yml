@@ -34,6 +34,9 @@ jobs:
         with:
           node-version: 20
 
+      - name: Strumento per leggere il bollettino PDF
+        run: command -v pdftotext >/dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq poppler-utils)
+
       - name: Scarica dati ARPAV e invia gli avvisi
         run: node scripts/idro.mjs
         env:
