@@ -50,6 +50,7 @@ for (const rete of Array.isArray(reti) ? reti : []) {
   let stazioni = [];
   try { stazioni = await get(`/api/networks/${id}/stations`, token); } catch (e) { console.log(`Rete ${id} (${nome}): stazioni non lette: ${e.message}`); }
   stazioni = Array.isArray(stazioni) ? stazioni : [];
+  stazioni = stazioni.map(x => (x && x.station ? x.station : x));   // ogni voce è {idnetwork, extcode, station:{…}}
   if (stazioni.length) { console.log('  Esempio di stazione (campi disponibili): ' + JSON.stringify(stazioni[0]).slice(0, 700)); risultato.tutte = stazioni; }
   console.log(`- rete ${id} «${nome}»: ${stazioni.length} stazioni`);
   risultato.reti.push({ id, nome, stazioni: stazioni.length });
@@ -57,6 +58,7 @@ for (const rete of Array.isArray(reti) ? reti : []) {
     const c = coord(s);
     if (!dentro(c)) continue;
     const sid = campo(s, ['id', 'idstazione', 'stationid']);
+    
     let sens = [];
     try { sens = await get(`/api/stations/${sid}/sensors`, token); } catch (e) { sens = [{ errore: e.message }]; }
     risultato.nelBacino.push({ rete: nome, stazione: s, sensori: sens });
@@ -65,11 +67,9 @@ for (const rete of Array.isArray(reti) ? reti : []) {
 console.log(`\nSTAZIONI NEL RIQUADRO DEL BRENTA: ${risultato.nelBacino.length}`);
 for (const x of risultato.nelBacino) {
   const s = x.stazione, c = coord(s);
-  const nome = campo(s, ['name', 'nome', 'description', 'descrizione']);
+  const nome = campo(s, ['name', 'nome', 'description', 'descrizione', 'descr', 'codice']);
   console.log(`* ${nome} (id ${campo(s, ['id', 'idstazione', 'stationid'])}) rete «${x.rete}» lat ${c.lat} lon ${c.lon} · sensori: ${JSON.stringify(x.sensori).slice(0, 400)}`);
 }
 if (!risultato.nelBacino.length && Array.isArray(reti) && reti.length) console.log('Nessuna stazione nel riquadro: forse i nomi dei campi coordinate sono diversi. Vedi il file elenco.json negli artefatti.');
-console.log('\nTUTTE LE STAZIONI (nome · id · coordinate se presenti):');
-console.log((risultato.tutte || []).map(x => { const c = coord(x); return `${campo(x, ['name', 'nome', 'description', 'descrizione', 'stationname']) ?? '?'} · ${campo(x, ['id', 'idstazione', 'stationid']) ?? '?'}${c.lat != null ? ` · ${c.lat},${c.lon}` : ''}`; }).join('\n'));
 mkdirSync(OUT, { recursive: true });
 writeFileSync(`${OUT}/elenco.json`, JSON.stringify(risultato, null, 1));
