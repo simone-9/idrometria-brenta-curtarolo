@@ -94,8 +94,13 @@ async function pdfBollettino() {
   if (process.env.BVM_SOURCE_FILE) return { buf: readFileSync(process.env.BVM_SOURCE_FILE), url: '' };
   const h = { 'User-Agent': 'idrometria-protezione-civile-curtarolo' };
   const pagina = await (await fetch(CFD_URL, { headers: h, signal: AbortSignal.timeout(45000) })).text();
-  const link = [...pagina.matchAll(/href=["']([^"']*BVM_(\d{6})[^"']*\.pdf)["']/gi)].map(m => ({ url: new URL(m[1].replace(/&amp;/g, '&'), CFD_URL).href, d: m[2] }));
-  if (!link.length) throw new Error('nessun bollettino BVM trovato nella pagina del CFD');
+  // il nome del file può essere seguito da altro nell'indirizzo (es. ".pdf/codice?t=..."): si cerca BVM_aammgg ovunque nel link
+  const link = [...pagina.matchAll(/href=["']([^"']*BVM_(\d{6})[^"']*)["']/gi)].map(m => ({ url: new URL(m[1].replace(/&amp;/g, '&'), CFD_URL).href, d: m[2] }));
+  if (!link.length) {
+    const visti = [...pagina.matchAll(/href=["']([^"']*(?:\.pdf|documents|vigilanza)[^"']*)["']/gi)].map(m => m[1]);
+    console.log(`::warning::Pagina CFD letta (${pagina.length} caratteri), link a documenti/PDF visti: ${visti.length}. Esempi: ${visti.slice(0, 8).join(' | ') || 'nessuno'}`);
+    throw new Error('nessun bollettino BVM trovato nella pagina del CFD');
+  }
   link.sort((a, b) => a.d.localeCompare(b.d));
   const l = link[link.length - 1];
   const r = await fetch(l.url, { headers: h, signal: AbortSignal.timeout(60000) });
