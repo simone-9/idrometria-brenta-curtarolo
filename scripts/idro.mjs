@@ -5,6 +5,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, mkdtempSync } from 
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { inviaPush, chiaveServizio } from './push.mjs';
 
 const SORGENTE = process.env.IDRO_SOURCE_URL || 'https://www.arpa.veneto.it/api/risorse/data-meteo/xml/Ultime48ore.xml';
 const FILE_PROVA = process.env.IDRO_SOURCE_FILE || '';
@@ -223,13 +224,34 @@ writeFileSync(`${OUT}/idro.json`, JSON.stringify({ v: 1, run: dati.run, aggiorna
 const puoInviare = DRY || (TOKEN && CHAT);
 if (!puoInviare) console.log('::warning::Mancano i segreti TELEGRAM_BOT_TOKEN e TELEGRAM_CHAT_ID: nessun avviso inviato.');
 let problemi = 0;
+let pushAttivo = false; try { pushAttivo = !!chiaveServizio(); } catch (e) { console.log('::warning::' + e.message); }
+stato.push = stato.push && typeof stato.push === 'object' ? stato.push : {};
 
 for (const s of cfg.stazioni.filter(x => x.allerta)) {
   const d = dati.st[s.id];
   if (!d || !d.dati.length) { console.log(`::warning::${s.nome}: dato non presente nel file ARPAV`); continue; }
   const [t, v] = d.dati[d.dati.length - 1];
   if (Date.now() - t > 90 * 60000) console.log(`::warning::${s.nome}: ultimo dato vecchio (${oraLocale(t)})`);
+  // notifica push dell'app a ogni superamento di G1, G2 o G3 (stato proprio, indipendente da Telegram)
+  if (!PROVA && pushAttivo && Date.now() - t <= 90 * 60000) {
+    const lp = livello(v, d.g), pp = stato.push[s.id];
+    if (pp == null) stato.push[s.id] = lp;   // primo controllo: si memorizza lo stato senza avvisare
+    else if (lp > pp) {
+      const nomeBreve = s.nome.replace(/^Brenta a /, '');
+      try {
+        const esito = await inviaPush({ titolo: `${nomeBreve} supera Guardia ${lp}`, testo: `Livello ${m2(v)} (soglia ${m2(d.g[lp - 1])}) · ore ${oraLocale(t).split(' del ')[0]}`, tag: `idro-${s.id}-${lp}` });
+        console.log(`Push ${nomeBreve} G${lp}: ${esito.inviati}/${esito.dispositivi} dispositivi, ${esito.rimossi} rimossi`);
+        stato.push[s.id] = lp;
+      } catch (e) { console.log('::error::Push non inviato: ' + e.message); problemi++; }
+    } else if (lp < pp) {
+      const sp = d.g[pp - 1];
+      if (sp == null || v < sp - (cfg.isteresi ?? 0.05)) stato.push[s.id] = lp;   // rientrata: si riarma l'avviso
+    }
+  }
   if (PROVA) {
+    if (pushAttivo && s === cfg.stazioni.filter(x => x.allerta)[0]) {
+      try { const e = await inviaPush({ titolo: 'PROVA · notifica idrometria', testo: 'Test del sistema di avvisi: nessuna soglia superata.', tag: 'idro-prova' }); console.log(`Push di prova: ${e.inviati}/${e.dispositivi} dispositivi, ${e.rimossi} rimossi`); } catch (e) { console.log('::error::Push di prova non inviato: ' + e.message); problemi++; }
+    }
     if (!puoInviare) continue;
     const link = esc(s.link || PAGINA_GENERICA);
     const testo = `🧪 <b>PROVA · simulazione avviso idrometrico</b>\n<i>Nessuna soglia superata: è solo un test del sistema di avvisi.</i>\n` +

@@ -44,6 +44,7 @@ jobs:
           OSSERVATORIO_USER: ${{ secrets.OSSERVATORIO_USER }}
           OSSERVATORIO_PASSWORD: ${{ secrets.OSSERVATORIO_PASSWORD }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           TEST_MESSAGGIO: ${{ inputs.prova && '1' || '' }}
 
       - name: Pubblica i dati per l'app (ramo "data")

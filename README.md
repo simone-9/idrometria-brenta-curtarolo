@@ -77,3 +77,15 @@ I dati dell'Osservatorio non vengono archiviati (sono scaricabili a richiesta da
 
 ### Analisi dell'archivio
 Actions → «Analisi archivio ARPAV» → Run workflow. Il log mostra la copertura dei dati, le piene trovate (salita ≥ 0,4 m a Barzizza) con il ritardo a Limena e, con almeno 5 piene utilizzabili, il tempo di viaggio e il coefficiente suggeriti per le «Impostazioni della stima» dell'app. Con meno piene dice di lasciare la stima spenta.
+
+
+## Notifiche push dell'app (anche ad app chiusa)
+
+Quando Barzizza o Limena superano **G1, G2 o G3** il servizio su GitHub invia una notifica push a tutti i dispositivi che hanno aperto l'app pubblicata e accettato le notifiche (indipendente dagli avvisi Telegram, che restano per G2 e G3). Funziona solo dall'app pubblicata in https (PWA o hosting), non dal file aperto in locale. Su iPhone solo dall'app aggiunta alla schermata Home (iOS 16.4 o successivo).
+
+Una tantum, nella console Firebase del progetto:
+1. **Impostazioni progetto → Cloud Messaging → Configurazione web → Certificati push web → Genera coppia di chiavi.** Copia la *chiave pubblica* e incollala nell'app: scheda Idrometria → Impostazioni della stima → «Notifiche push» → Salva.
+2. **Impostazioni progetto → Account di servizio → Genera nuova chiave privata.** Si scarica un file JSON: incollane **tutto il contenuto** nel segreto GitHub `FIREBASE_SERVICE_ACCOUNT` (Settings → Secrets and variables → Actions). Non condividerlo e non metterlo in chat o nel repository: dà accesso al progetto.
+3. Ripubblica le regole di `firestore.rules` (nuova raccolta `push_dispositivi`) e pubblica la nuova versione dell'app/PWA con `push-handler.js`.
+
+Ogni utente, al primo tocco dopo l'accesso, vede la richiesta di consenso alle notifiche. Il lancio manuale con «prova» invia anche una notifica push di prova. I dispositivi non più validi vengono tolti da soli.
