@@ -68,3 +68,9 @@ se due avvii arrivano insieme, il blocco `concurrency` del flusso li mette in fi
 ### Da sapere
 - I minuti di Actions dei repository pubblici sono gratuiti, quindi 144 avvii al giorno non hanno costo.
 - Il token dà accesso solo alle Actions di questo repository, ma va trattato come una password: se pensi sia stato visto, revocalo da GitHub e creane uno nuovo.
+
+## Archivio storico ARPAV (ramo `archivio`)
+Ad ogni esecuzione, al massimo una volta ogni 6 ore, i dati ARPAV letti (livello e portata di ogni stazione, pioggia dei pluviometri) vengono aggiunti a file CSV mensili nel ramo `archivio`:
+`dati/<id-stazione>/AAAA-MM.csv` (istante UTC, livello in m, portata in m³/s) e `dati/pioggia-<id>/AAAA-MM.csv` (pioggia cumulata giornaliera in mm). `indice.json` elenca i nomi delle stazioni.
+Il file ARPAV contiene solo le ultime 48 ore, quindi basta che il flusso giri almeno una volta ogni 2 giorni per non perdere nulla. Serve a calibrare in futuro il tempo di viaggio della piena da Barzizza a Limena con piene reali.
+I dati dell'Osservatorio non vengono archiviati (sono scaricabili a richiesta dal loro storico). I dati ARPAV sono CC BY 4.0, automatici e non validati.

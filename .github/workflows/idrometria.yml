@@ -56,3 +56,32 @@ jobs:
           git add idro.json state.json
           git commit -q -m "dati $(date -u +%Y-%m-%dT%H:%M:%SZ)"
           git push -q -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" data
+
+      - name: Archivio storico ARPAV (ramo "archivio", al massimo una volta ogni 6 ore)
+        if: always() && hashFiles('out/idro.json') != ''
+        continue-on-error: true
+        run: |
+          set -e
+          URL="https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+          rm -rf archivio-wt
+          if git ls-remote --exit-code --heads "$URL" archivio >/dev/null 2>&1; then
+            git clone -q --depth 1 --branch archivio "$URL" archivio-wt
+            ULTIMO=$(git -C archivio-wt log -1 --format=%ct)
+          else
+            mkdir archivio-wt
+            git -C archivio-wt init -q -b archivio
+            git -C archivio-wt remote add origin "$URL"
+            ULTIMO=0
+          fi
+          if [ $(( $(date +%s) - ULTIMO )) -lt 19800 ]; then
+            echo "Archivio aggiornato meno di 5,5 ore fa: salto."
+            exit 0
+          fi
+          node scripts/archivio.mjs out/idro.json archivio-wt
+          cd archivio-wt
+          git config user.name "idrometria-bot"
+          git config user.email "idrometria-bot@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then echo "Nessuna novità da archiviare."; exit 0; fi
+          git commit -q -m "archivio $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push -q origin archivio
