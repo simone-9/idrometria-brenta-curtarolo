@@ -9,6 +9,10 @@ on:
         description: 'Invia un messaggio Telegram di PROVA (nessuna allerta reale)'
         type: boolean
         default: false
+      prova_push:
+        description: 'Invia una notifica PUSH di PROVA ai dispositivi (nessuna allerta reale)'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -46,6 +50,7 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           TEST_MESSAGGIO: ${{ inputs.prova && '1' || '' }}
+          TEST_PUSH: ${{ inputs.prova_push && '1' || '' }}
 
       - name: Pubblica i dati per l'app (ramo "data")
         if: always() && hashFiles('out/idro.json') != ''

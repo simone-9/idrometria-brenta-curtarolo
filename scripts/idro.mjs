@@ -13,6 +13,7 @@ const OUT = process.env.OUT_DIR || 'out';
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
 const CHAT = process.env.TELEGRAM_CHAT_ID || '';
 const DRY = process.env.TELEGRAM_DRY_RUN === '1';
+const PROVA_PUSH = process.env.TEST_PUSH === '1';   // avvio manuale con «prova_push»: invia solo una notifica push di prova
 const PROVA = process.env.TEST_MESSAGGIO === '1';   // avvio manuale con «prova»: invia un messaggio di test e non tocca lo stato degli avvisi
 const PAGINA_GENERICA = 'https://www.arpa.veneto.it/dati-ambientali/dati-in-diretta/meteo-idro-nivo/idro_prec';
 const cfg = JSON.parse(readFileSync('config/stazioni.json', 'utf8'));
@@ -233,7 +234,7 @@ for (const s of cfg.stazioni.filter(x => x.allerta)) {
   const [t, v] = d.dati[d.dati.length - 1];
   if (Date.now() - t > 90 * 60000) console.log(`::warning::${s.nome}: ultimo dato vecchio (${oraLocale(t)})`);
   // notifica push dell'app a ogni superamento di G1, G2 o G3 (stato proprio, indipendente da Telegram)
-  if (!PROVA && pushAttivo && Date.now() - t <= 90 * 60000) {
+  if (!PROVA && !PROVA_PUSH && pushAttivo && Date.now() - t <= 90 * 60000) {
     const lp = livello(v, d.g), pp = stato.push[s.id];
     if (pp == null) stato.push[s.id] = lp;   // primo controllo: si memorizza lo stato senza avvisare
     else if (lp > pp) {
@@ -248,10 +249,14 @@ for (const s of cfg.stazioni.filter(x => x.allerta)) {
       if (sp == null || v < sp - (cfg.isteresi ?? 0.05)) stato.push[s.id] = lp;   // rientrata: si riarma l'avviso
     }
   }
-  if (PROVA) {
-    if (pushAttivo && s === cfg.stazioni.filter(x => x.allerta)[0]) {
-      try { const e = await inviaPush({ titolo: 'PROVA · notifica idrometria', testo: 'Test del sistema di avvisi: nessuna soglia superata.', tag: 'idro-prova' }); console.log(`Push di prova: ${e.inviati}/${e.dispositivi} dispositivi, ${e.rimossi} rimossi`); } catch (e) { console.log('::error::Push di prova non inviato: ' + e.message); problemi++; }
+  if (PROVA_PUSH) {
+    if (s === cfg.stazioni.filter(x => x.allerta)[0]) {
+      if (!pushAttivo) { console.log('::error::Prova push: notifiche non attive (manca il segreto FIREBASE_SERVICE_ACCOUNT)'); problemi++; }
+      else try { const e = await inviaPush({ titolo: 'PROVA · notifica idrometria', testo: 'Test del sistema di avvisi: nessuna soglia superata.', tag: 'idro-prova' }); console.log(`Push di prova: ${e.inviati}/${e.dispositivi} dispositivi, ${e.rimossi} rimossi`); if (!e.dispositivi) console.log('::warning::Nessun dispositivo registrato: apri l\'app, tocca lo schermo e accetta le notifiche'); } catch (e) { console.log('::error::Push di prova non inviato: ' + e.message); problemi++; }
     }
+    continue;
+  }
+  if (PROVA) {
     if (!puoInviare) continue;
     const link = esc(s.link || PAGINA_GENERICA);
     const testo = `🧪 <b>PROVA · simulazione avviso idrometrico</b>\n<i>Nessuna soglia superata: è solo un test del sistema di avvisi.</i>\n` +
