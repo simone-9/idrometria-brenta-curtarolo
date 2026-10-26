@@ -1,0 +1,27 @@
+name: Elenco stazioni Osservatorio Alpi Orientali
+
+# Avvio solo manuale: fa il login, elenca reti e stazioni vicine al bacino del Brenta e scrive il risultato nel log.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  elenco:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Elenca stazioni e sensori
+        run: node scripts/osservatorio-elenco.mjs
+        env:
+          OSSERVATORIO_USER: ${{ secrets.OSSERVATORIO_USER }}
+          OSSERVATORIO_PASSWORD: ${{ secrets.OSSERVATORIO_PASSWORD }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: elenco-osservatorio
+          path: out-osservatorio/elenco.json
+          retention-days: 7
