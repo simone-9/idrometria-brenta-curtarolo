@@ -53,7 +53,7 @@ if (m.length < 100 || v.length < 100) { console.log('\nDati insufficienti a Barz
 const maxIn = (s, da, a) => { let b = null; for (const p of s) { if (p[0] < da) continue; if (p[0] > a) break; if (!b || p[1] > b[1]) b = p; } return b; };
 const minIn = (s, da, a) => { let b = null; for (const p of s) { if (p[0] < da) continue; if (p[0] > a) break; if (!b || p[1] < b[1]) b = p; } return b; };
 const meta = (s, tMin, tPk, vMin, vPk) => { const so = vMin + 0.5 * (vPk - vMin); for (const p of s) { if (p[0] < tMin) continue; if (p[0] > tPk) break; if (p[1] >= so) return p[0]; } return null; };
-const SALITA_MIN = 0.4;   // m di salita a Barzizza perché una piena sia considerata
+const SALITA_MIN = +(process.env.SALITA_MIN || 0.4);   // m di salita a Barzizza perché una piena sia considerata
 const eventi = [];
 for (let i = 1; i < m.length - 1; i++) {
   const [t, lv] = m[i];

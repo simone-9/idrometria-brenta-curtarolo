@@ -1,0 +1,33 @@
+name: Analisi storico orario ARPAV (ambienteveneto.it)
+
+# Avvio solo manuale. Scarica lo storico orario di Barzizza e Limena da ambienteveneto.it, trova le piene a Barzizza
+# e stampa nel log il tempo di viaggio Barzizza → Limena e il coefficiente da inserire nelle «Impostazioni della stima».
+# Non salva e non pubblica i dati scaricati.
+on:
+  workflow_dispatch:
+    inputs:
+      anni:
+        description: 'Quanti anni indietro scaricare (es. 6)'
+        default: '6'
+      salita_min:
+        description: 'Salita minima a Barzizza (m) perché una piena sia considerata'
+        default: '0.3'
+
+permissions:
+  contents: read
+
+jobs:
+  analisi:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Scarica lo storico orario
+        run: node scripts/scarica-ambienteveneto.mjs storico "${{ inputs.anni }}"
+      - name: Analizza le piene
+        env:
+          SALITA_MIN: ${{ inputs.salita_min }}
+        run: node scripts/analisi-archivio.mjs storico
