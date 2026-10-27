@@ -120,6 +120,30 @@ function testoPdf(buf) {
   writeFileSync(f, buf);
   return execFileSync('pdftotext', ['-layout', f, '-'], { encoding: 'utf8', maxBuffer: 20e6 });
 }
+// Colonne della tabella dei fenomeni (posizione del primo carattere nel testo "-layout" e nome): il resto della riga di ogni zona si assegna alla colonna più vicina
+const COLONNE_FEN = [[13, 'pioggia'], [25, 'temporali'], [39, 'temporaliForti'], [50, 'neve<100'], [62, 'neve100-500'], [73, 'neve500-1500'], [84, 'neve1500-2000'], [98, 'ghiaccio'], [116, 'vento<500'], [136, 'vento500-1500'], [155, 'vento1500-2500'], [172, 'caldo']];
+// Fenomeni previsti per una zona (escluse pioggia e valori "-"): [[colonna, livello, testo]]. Se la riga non si legge bene torna [] (mai valori inventati)
+function fenomeniZona(sez, id) {
+  const righe = sez.split('\n');
+  const i = righe.findIndex(r => new RegExp('^[ \\t]*' + id + '[ \\t]').test(r));
+  if (i < 0) return [];
+  const r1 = righe[i], r2 = righe[i + 1] || '';
+  const toc = [];
+  for (const m of r1.slice(0, 200).matchAll(/(?<!\S)\S+/g)) {
+    if (m.index < 8) continue;                                  // la sigla della zona
+    let best = null;
+    for (const c of COLONNE_FEN) { const d = Math.abs(c[0] - m.index); if (d <= 7 && (!best || d < best.d)) best = { d, k: c[1] }; }
+    if (best) toc.push({ k: best.k, v: m[0], x: m.index + m[0].length / 2, t: '' });
+  }
+  if (!toc.length) return [];
+  for (const s of r2.matchAll(/\S+(?: \S+)*/g)) {               // segmenti di testo separati da almeno due spazi
+    const cx = s.index + s[0].length / 2;
+    let best = null;
+    for (const o of toc) { const d = Math.abs(o.x - cx); if (d <= 9 && (!best || d < best.d)) best = { d, o }; }
+    if (best) best.o.t = (best.o.t ? best.o.t + ' ' : '') + s[0].replace(/\s+/g, ' ').trim();
+  }
+  return toc.filter(o => o.k !== 'pioggia' && o.v !== '-' && /^\d+$/.test(o.v)).map(o => [o.k, o.v, o.t]);
+}
 function leggiBollettino(t, zone) {
   const doc = /Documento n\.\s*(\d+)\s*\/\s*(\d{4})/.exec(t);
   const emissione = ((/Emissione:\s*([^\n\r]+)/.exec(t) || [])[1] || '').replace(/\s+/g, ' ').trim();
@@ -133,12 +157,13 @@ function leggiBollettino(t, zone) {
     const d = /(\d{1,2})\s+([A-Za-zàèéìòù]+)\s+(\d{4})/.exec(h[2]);
     const mese = d ? MESI[d[2].toLowerCase()] : 0;
     if (!d || !mese) throw new Error('data del bollettino non riconosciuta');
-    const z = {};
+    const z = {}, fen = {};
     for (const x of zone) {
+      try { fen[x.id] = fenomeniZona(sez, x.id); } catch { fen[x.id] = []; }
       const m = new RegExp('^[ \\t]*' + x.id + '[ \\t]+(\\S+)', 'm').exec(sez);
       z[x.id] = m && Object.prototype.hasOwnProperty.call(CLASSI_PIOGGIA, m[1]) ? m[1] : null;   // mai un valore inventato: se non si legge resta null
     }
-    return { quando: h[1], iso: `${d[3]}-${String(mese).padStart(2, '0')}-${String(+d[1]).padStart(2, '0')}`, etichetta: h[2].trim().toLowerCase(), zone: z };
+    return { quando: h[1], iso: `${d[3]}-${String(mese).padStart(2, '0')}-${String(+d[1]).padStart(2, '0')}`, etichetta: h[2].trim().toLowerCase(), zone: z, fen };
   });
   if (giorni.every(g => Object.values(g.zone).every(v => v === null))) throw new Error('nessuna zona letta nel bollettino');
   const blocco = (a, b) => { const m = new RegExp(a + '\\s*([\\s\\S]*?)\\s*' + b).exec(t); return m ? m[1].replace(/\s+/g, ' ').trim() : ''; };
