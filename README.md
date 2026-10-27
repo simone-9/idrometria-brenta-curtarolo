@@ -91,3 +91,7 @@ Una tantum, nella console Firebase del progetto:
 Ogni utente, al primo tocco dopo l'accesso, vede la richiesta di consenso alle notifiche. Il lancio manuale con «prova_push» invia solo una notifica push di prova. I dispositivi non più validi vengono tolti da soli.
 
 La push parte anche quando sale il livello dell'**allerta CFD** (zona E1) per oggi o domani: il servizio legge lo storico scritto dal monitoraggio automatico (raccolta `allerte_cfd_veneto`) e avvisa solo se il livello aumenta rispetto all'ultimo controllo.
+
+## Registro automatico delle piene
+
+A ogni esecuzione il servizio controlla Barzizza e Limena: una piena si apre quando una delle due supera G1 e si chiude dopo 6 ore sotto G1. Per ogni piena scrive in Firestore (raccolta `idro_eventi`) il picco e l'orario di ogni passaggio di soglia; a piena conclusa, se i due picchi sono ben distinti, calcola anche il tempo di viaggio da Barzizza a Limena e il coefficiente. L'app li mostra nella scheda Idrometria, li inserisce nel verbale e propone agli amministratori di usarli per attivare la stima. Serve il segreto `FIREBASE_SERVICE_ACCOUNT` e la regola `idro_eventi` in `firestore.rules` pubblicata.

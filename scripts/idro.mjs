@@ -5,7 +5,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, mkdtempSync } from 
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { inviaPush, chiaveServizio, leggiCollezione } from './push.mjs';
+import { inviaPush, chiaveServizio, leggiCollezione, scriviDocumento } from './push.mjs';
 
 const SORGENTE = process.env.IDRO_SOURCE_URL || 'https://www.arpa.veneto.it/api/risorse/data-meteo/xml/Ultime48ore.xml';
 const FILE_PROVA = process.env.IDRO_SOURCE_FILE || '';
@@ -286,6 +286,44 @@ for (const s of cfg.stazioni.filter(x => x.allerta)) {
     if (sogliaPrec == null || v < sogliaPrec - (cfg.isteresi ?? 0.05)) stato[s.id] = liv;   // rientrata: si riarma l'avviso
   }
 }
+// ---- Registro automatico degli eventi di piena (Firestore, raccolta idro_eventi): picchi e orari dei passaggi di soglia a Barzizza e Limena,
+// con il tempo di viaggio osservato tra i due picchi. Un evento si apre quando una delle due stazioni supera G1 e si chiude dopo 6 ore sotto G1.
+async function registroEpisodi() {
+  const ID_MONTE = '300005751', ID_RIF = '300005777', ST = [[ID_MONTE, 'Barzizza'], [ID_RIF, 'Limena']], dd = {};
+  for (const [id, nome] of ST) { const x = dati.st[id]; if (!x || !x.dati.length || !x.g || x.g[0] == null) return; dd[id] = { nome, g: x.g, serie: x.dati }; }
+  const ora = Date.now(), ultimoT = Math.max(...ST.map(([id]) => dd[id].serie[dd[id].serie.length - 1][0]));
+  let ep = stato.episodio || null;
+  if (!ep) {
+    const cand = ST.flatMap(([id]) => dd[id].serie.filter(([t, v]) => v >= dd[id].g[0] && t > (stato.episodioFine || 0)).map(([t]) => t));
+    if (!cand.length) return;
+    const inizio = Math.min(...cand);
+    ep = { id: new Date(inizio).toISOString().slice(0, 16).replace(/[-:T]/g, ''), inizio, fine: null, ultimoSopra: inizio, st: {} };
+  }
+  for (const [id, nome] of ST) {
+    const d = dd[id], da = ep.inizio - 12 * 3600000;
+    if (!ep.st[id]) ep.st[id] = { nome, max: null, base: Math.min(...d.serie.filter(([t]) => t >= da && t <= ep.inizio + 3600000).map(([, v]) => v), ...d.serie.map(([, v]) => v).slice(0, 1)), soglie: {} };
+    const e = ep.st[id];
+    d.serie.filter(([t]) => t >= da).forEach(([t, v]) => {
+      if (!e.max || v > e.max.v) e.max = { t, v };
+      d.g.forEach((g, i) => { if (g != null && v >= g && !e.soglie[i + 1]) e.soglie[i + 1] = { t, v }; });
+      if (v >= d.g[0] && t > ep.ultimoSopra) ep.ultimoSopra = t;
+    });
+  }
+  if (ora - ep.ultimoSopra > 6 * 3600000 && ora - ultimoT < 90 * 60000) {   // chiuso: 6 ore sotto G1 con dati aggiornati
+    ep.fine = ep.ultimoSopra;
+    const b = ep.st[ID_MONTE], l = ep.st[ID_RIF], h = (l.max.t - b.max.t) / 3600000, sB = b.max.v - b.base, sL = l.max.v - l.base;
+    if (sB >= 0.3 && sL >= 0.3 && h >= 0.5 && h <= 24) { ep.ritardoOre = Math.round(h * 10) / 10; ep.kStima = Math.round(sL / sB * 100) / 100; }
+    stato.episodio = null; stato.episodioFine = ep.fine;
+  } else stato.episodio = ep;
+  const iso = t => (t == null ? null : new Date(t).toISOString());
+  const stz = Object.fromEntries(Object.entries(ep.st).map(([id, e]) => [id, { nome: e.nome, max: e.max && { v: e.max.v, t: iso(e.max.t) }, base: e.base, soglie: Object.fromEntries(Object.entries(e.soglie).map(([i, x]) => [i, { v: x.v, t: iso(x.t) }])) }]));
+  const doc = { id: ep.id, inizio: iso(ep.inizio), fine: iso(ep.fine), aperto: !ep.fine, stazioni: stz, ritardoOre: ep.ritardoOre ?? null, kStima: ep.kStima ?? null, aggiornato: new Date().toISOString() };
+  const firma = JSON.stringify({ ...doc, aggiornato: 0 });
+  if (stato.episodioScritto === ep.id + firma) return;
+  if (pushAttivo) { await scriviDocumento('idro_eventi', ep.id, doc); console.log(`Registro eventi: ${ep.id} ${ep.fine ? 'chiuso' : 'aperto'}${ep.ritardoOre ? ', tempo di viaggio ' + ep.ritardoOre + ' h' : ''}`); }
+  stato.episodioScritto = ep.id + firma;
+}
+if (!PROVA && !PROVA_PUSH) { try { await registroEpisodi(); } catch (e) { console.log('::warning::Registro eventi non aggiornato: ' + e.message); } }
 // notifica push quando sale il livello dell'allerta CFD (zona E1) per oggi o domani: legge lo storico scritto dal monitoraggio automatico
 if (pushAttivo && !PROVA && !PROVA_PUSH) {
   try {

@@ -81,3 +81,21 @@ export async function leggiCollezione(coll, opzioni = {}) {
   } while (pag);
   return out;
 }
+
+// Scrive (sostituisce) un documento di Firestore con l'account di servizio. I valori sono convertiti dal formato JavaScript.
+function aFs(v) {
+  if (v === null || v === undefined) return { nullValue: null };
+  if (typeof v === 'string') return { stringValue: v };
+  if (typeof v === 'boolean') return { booleanValue: v };
+  if (typeof v === 'number') return Number.isInteger(v) ? { integerValue: String(v) } : { doubleValue: v };
+  if (Array.isArray(v)) return { arrayValue: { values: v.map(aFs) } };
+  return { mapValue: { fields: Object.fromEntries(Object.entries(v).filter(([, x]) => x !== undefined).map(([k, x]) => [k, aFs(x)])) } };
+}
+export async function scriviDocumento(coll, id, oggetto, opzioni = {}) {
+  const f = opzioni.fetch || fetch, k = chiaveServizio(opzioni.env || process.env);
+  if (!k) return false;
+  const tok = await accessToken(k, f);
+  const r = await f(`https://firestore.googleapis.com/v1/projects/${k.project_id}/databases/(default)/documents/${coll}/${encodeURIComponent(id)}`, { method: 'PATCH', headers: { authorization: 'Bearer ' + tok, 'content-type': 'application/json' }, body: JSON.stringify({ fields: aFs(oggetto).mapValue.fields }) });
+  if (!r.ok) throw new Error(`Scrittura di ${coll}/${id} non riuscita (${r.status}): ` + (await r.text().catch(() => '')).slice(0, 200));
+  return true;
+}
