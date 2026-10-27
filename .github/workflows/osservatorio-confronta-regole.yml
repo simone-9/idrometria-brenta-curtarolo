@@ -1,0 +1,29 @@
+name: Confronto regole di preavviso (livelli e pioggia)
+
+# Avvio solo manuale. Confronta più regole (Fonzaso, altri livelli, pioggia) sullo storico e stampa nel log una tabella.
+# Non salva e non pubblica i dati scaricati.
+on:
+  workflow_dispatch:
+    inputs:
+      anni:
+        description: 'Quanti anni indietro analizzare (massimo)'
+        default: '6'
+
+permissions:
+  contents: read
+
+jobs:
+  storico:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Confronta le regole
+        run: node scripts/osservatorio-confronta-regole.mjs
+        env:
+          OSSERVATORIO_USER: ${{ secrets.OSSERVATORIO_USER }}
+          OSSERVATORIO_PASSWORD: ${{ secrets.OSSERVATORIO_PASSWORD }}
+          ANNI_MAX: ${{ inputs.anni }}
