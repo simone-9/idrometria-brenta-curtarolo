@@ -44,6 +44,7 @@ function leggi(testo, cd, an) {
   return out;
 }
 
+let diagnosticato = false;
 const anno = new Date().getUTCFullYear();
 const indice = { stazioni: {} };
 for (const [cd, [id, nome]] of Object.entries(STAZIONI)) {
@@ -51,8 +52,18 @@ for (const [cd, [id, nome]] of Object.entries(STAZIONI)) {
   const righe = [];
   for (let an = anno - ANNI + 1; an <= anno; an++) {
     try {
-      const d = leggi(await scarica(cd, an), cd, an);
+      const testo = await scarica(cd, an);
+      const d = leggi(testo, cd, an);
       console.log(`${nome} ${an}: ${d.length} ore`);
+      if (!d.length && !diagnosticato) {   // una sola volta: mostra cosa risponde il sito, per capire il formato
+        diagnosticato = true;
+        console.log(`DIAGNOSI cd=${cd} an=${an}: ${testo.length} caratteri. Inizio della risposta:\n${testo.slice(0, 700)}\n--- fine inizio risposta ---`);
+        try {
+          const r2 = await fetch(`${BASE}?cd=${cd}&an=${an}`, { headers: { 'User-Agent': 'idrometria-protezione-civile-curtarolo' }, signal: AbortSignal.timeout(60000) });
+          const t2 = await r2.text();
+          console.log(`DIAGNOSI senza &csv: stato ${r2.status}, tipo ${r2.headers.get('content-type')}, ${t2.length} caratteri. Inizio:\n${t2.slice(0, 700)}\n--- fine ---`);
+        } catch (e) { console.log('DIAGNOSI senza &csv non riuscita: ' + e.message); }
+      }
       for (const x of d) righe.push(x);
     } catch (e) { console.log(`::warning::${nome} ${an}: ${e.message}`); }
     await pausa(700);
