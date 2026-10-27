@@ -183,4 +183,15 @@ REGOLE.forEach(([nome], i) => {
 });
 console.log('\nPIENE E REGOLE CHE LE HANNO COLTE (numeri della tabella):');
 for (const pi of piene) console.log(`  ${fmt(pi.t).slice(0, 16)}  picco ${pi.v.toFixed(2)} m, salita +${pi.s.toFixed(2)} m: ${pi.colte.length ? pi.colte.join(', ') : 'nessuna'}`);
+// verifica su periodi separati: le soglie vanno «scelte» su un periodo e «provate» su un altro, per non farsi ingannare da regole adattate agli stessi dati
+const TAGLIO = Date.UTC(2024, 0, 1);
+console.log(`\nVERIFICA SU PERIODI SEPARATI (taglio al 1 gennaio 2024): periodo A = ${fmt(t0).slice(0, 10)} → 2023-12-31, periodo B = 2024-01-01 → ${fmt(t1).slice(0, 10)}`);
+console.log('N. | regola | A: allarmi, veri ≥0,5 m, ≥1 m, piene colte | B: allarmi, veri ≥0,5 m, ≥1 m, piene colte');
+const riga = (i, da, a) => {
+  const ev = stato[i].ep.filter(e => e.t >= da && e.t < a && e.p != null), n = ev.length;
+  const h05 = ev.filter(e => e.p >= 0.5).length, h10 = ev.filter(e => e.p >= 1).length;
+  const pp = piene.filter(x => x.t >= da && x.t < a), colte = pp.filter(x => x.colte.includes(i + 1)).length;
+  return `${n} allarmi, ${h05}/${n} (${n ? Math.round(100 * h05 / n) : 0}%), ${h10}/${n} (${n ? Math.round(100 * h10 / n) : 0}%), piene ${colte}/${pp.length}`;
+};
+REGOLE.forEach(([nome], i) => console.log(`${String(i + 1).padStart(2)} | ${nome} | ${riga(i, t0, TAGLIO)} | ${riga(i, TAGLIO, t1 + 1)}`));
 console.log('\nNota: dati automatici non validati; la pioggia usa solo le stazioni attive nel mese e conta zero nelle ore senza letture. Limena non è incluso. Un buon preavviso ha pochi allarmi/anno, molti «veri» e molte piene colte.');
