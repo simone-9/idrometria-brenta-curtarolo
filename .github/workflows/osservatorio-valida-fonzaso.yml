@@ -1,0 +1,29 @@
+name: Verifica preavviso Fonzaso sullo storico
+
+# Avvio solo manuale. Applica la regola del riquadro di Fonzaso a tutto lo storico e stampa nel log quanti allarmi erano veri e quanti falsi.
+# Non salva e non pubblica i dati scaricati.
+on:
+  workflow_dispatch:
+    inputs:
+      anni:
+        description: 'Quanti anni indietro analizzare (massimo)'
+        default: '6'
+
+permissions:
+  contents: read
+
+jobs:
+  storico:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Verifica la regola
+        run: node scripts/osservatorio-valida-fonzaso.mjs
+        env:
+          OSSERVATORIO_USER: ${{ secrets.OSSERVATORIO_USER }}
+          OSSERVATORIO_PASSWORD: ${{ secrets.OSSERVATORIO_PASSWORD }}
+          ANNI_MAX: ${{ inputs.anni }}
