@@ -102,14 +102,14 @@ async function pdfBollettino() {
   if (process.env.BVM_SOURCE_FILE) return { buf: readFileSync(process.env.BVM_SOURCE_FILE), url: '' };
   const h = { 'User-Agent': 'idrometria-protezione-civile-curtarolo' };
   const pagina = await (await fetch(CFD_URL, { headers: h, signal: AbortSignal.timeout(45000) })).text();
-  // il nome del file può essere seguito da altro nell'indirizzo (es. ".pdf/codice?t=..."): si cerca BVM_aammgg ovunque nel link
-  const link = [...pagina.matchAll(/href=["']([^"']*BVM_(\d{6})[^"']*)["']/gi)].map(m => ({ url: new URL(m[1].replace(/&amp;/g, '&'), CFD_URL).href, d: m[2] }));
+  // il nome del file può essere seguito da altro nell'indirizzo (es. ".pdf/codice?t=..."): si cerca BVM_aammgg (bollettino) o AVM_aammgg (avviso) ovunque nel link
+  const link = [...pagina.matchAll(/href=["']([^"']*(?:BVM|AVM)_(\d{6})[^"']*)["']/gi)].map(m => ({ url: new URL(m[1].replace(/&amp;/g, '&'), CFD_URL).href, d: m[2], avviso: /AVM_/i.test(m[1]) }));
   if (!link.length) {
     const visti = [...pagina.matchAll(/href=["']([^"']*(?:\.pdf|documents|vigilanza)[^"']*)["']/gi)].map(m => m[1]);
     console.log(`::warning::Pagina CFD letta (${pagina.length} caratteri), link a documenti/PDF visti: ${visti.length}. Esempi: ${visti.slice(0, 8).join(' | ') || 'nessuno'}`);
-    throw new Error('nessun bollettino BVM trovato nella pagina del CFD');
+    throw new Error('nessun bollettino/avviso BVM/AVM trovato nella pagina del CFD');
   }
-  link.sort((a, b) => a.d.localeCompare(b.d));
+  link.sort((a, b) => a.d.localeCompare(b.d) || (a.avviso - b.avviso));   // il più recente; a parità di data l'avviso (aggiorna il bollettino)
   const l = link[link.length - 1];
   const r = await fetch(l.url, { headers: h, signal: AbortSignal.timeout(60000) });
   if (!r.ok) throw new Error('bollettino: risposta ' + r.status);
@@ -167,7 +167,7 @@ function leggiBollettino(t, zone) {
   });
   if (giorni.every(g => Object.values(g.zone).every(v => v === null))) throw new Error('nessuna zona letta nel bollettino');
   const blocco = (a, b) => { const m = new RegExp(a + '\\s*([\\s\\S]*?)\\s*' + b).exec(t); return m ? m[1].replace(/\s+/g, ' ').trim() : ''; };
-  return { doc: doc ? `${doc[1]}/${doc[2]}` : '', emissione, giorni, fenomeni: blocco('FENOMENI PREVISTI', 'TENDENZA'), tendenza: blocco('TENDENZA', 'Agenzia Regionale'), classi: CLASSI_PIOGGIA, zone: cfg.bollettino.zone };
+  return { tipo: /AVVISO\s+DI\s+VIGILANZA/i.test(t) ? 'Avviso' : 'Bollettino', doc: doc ? `${doc[1]}/${doc[2]}` : '', emissione, giorni, fenomeni: blocco('FENOMENI PREVISTI', 'TENDENZA'), tendenza: blocco('TENDENZA', 'Agenzia Regionale'), classi: CLASSI_PIOGGIA, zone: cfg.bollettino.zone };
 }
 
 
