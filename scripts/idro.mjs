@@ -225,8 +225,18 @@ async function osservatorio(c) {
   return out;
 }
 
+// diagnosi quando ARPAV non risponde: risultati scritti come avvisi (si leggono senza aprire il log)
+function diagnosi() {
+  const prove = [['IPv4', ['-4', SORGENTE]], ['IPv6', ['-6', SORGENTE]], ['senza www', ['-4', SORGENTE.replace('://www.', '://')]], ['http', ['-4', SORGENTE.replace('https://', 'http://')]], ['home', ['-4', 'https://www.arpa.veneto.it/']]];
+  for (const [n, a] of prove) {
+    try { const o = execFileSync('curl', ['-sS', '-o', '/dev/null', '-w', '%{http_code} %{time_connect}s', '--connect-timeout', '15', '--max-time', '25', '-A', 'Mozilla/5.0', ...a], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }); console.log(`::warning::Diagnosi ${n}: ${o}`); }
+    catch (e) { console.log(`::warning::Diagnosi ${n}: ${String((e.stderr || e.message)).trim().slice(0, 150)}`); }
+  }
+}
+
 let xml;
 try { xml = await scarica(); } catch (e) {
+  if (!process.env.IDRO_SOURCE_URL) { try { diagnosi(); } catch (x) {} }
   // ARPAV a volte non è raggiungibile dai server di GitHub: non è un errore del programma.
   // Si esce senza errore: restano pubblicati gli ultimi dati buoni e la prossima esecuzione (dopo 10 minuti) riprova.
   console.log('::warning::ARPAV non raggiungibile, dati non aggiornati in questa esecuzione: ' + (e && e.cause && e.cause.code ? e.cause.code : (e && e.message) || e));
