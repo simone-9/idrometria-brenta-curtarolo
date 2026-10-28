@@ -234,15 +234,17 @@ function diagnosi() {
   }
 }
 
-let xml;
+let xml, arpavOk = true, dati;
 try { xml = await scarica(); } catch (e) {
   if (!process.env.IDRO_SOURCE_URL) { try { diagnosi(); } catch (x) {} }
   // ARPAV a volte non è raggiungibile dai server di GitHub: non è un errore del programma.
-  // Si esce senza errore: restano pubblicati gli ultimi dati buoni e la prossima esecuzione (dopo 10 minuti) riprova.
-  console.log('::warning::ARPAV non raggiungibile, dati non aggiornati in questa esecuzione: ' + (e && e.cause && e.cause.code ? e.cause.code : (e && e.message) || e));
-  process.exit(0);
+  // Si riusano gli ultimi dati ARPAV pubblicati (l'app li segna come non aggiornati) e si leggono comunque Osservatorio e bollettino.
+  console.log('::warning::ARPAV non raggiungibile, dati ARPAV non aggiornati in questa esecuzione: ' + (e && e.cause && e.cause.code ? e.cause.code : (e && e.message) || e));
+  arpavOk = false;
+  try { const prec = JSON.parse(readFileSync(`${OUT}/idro.json`, 'utf8')); if (prec && prec.st) dati = { run: prec.run, st: prec.st, pl: prec.pl }; } catch (x) {}
+  if (!dati) { console.log('::warning::Nessun dato ARPAV precedente da riusare.'); process.exit(0); }
 }
-const dati = leggi(xml);
+if (arpavOk) dati = leggi(xml);
 mkdirSync(OUT, { recursive: true });
 const fileStato = `${OUT}/state.json`;
 const stato = existsSync(fileStato) ? JSON.parse(readFileSync(fileStato, 'utf8')) : {};
@@ -267,6 +269,11 @@ try {
   if (stato.os) os = Object.assign({}, stato.os, { nonAggiornato: true });
 }
 writeFileSync(`${OUT}/idro.json`, JSON.stringify({ v: 1, run: dati.run, aggiornato: new Date().toISOString(), fonte: 'ARPAV Veneto, rete idrografica (CC BY 4.0), dati non validati', st: dati.st, pl: dati.pl, meteo, os }));
+if (!arpavOk) {   // dati ARPAV vecchi: nessun avviso né previsione, si salva solo lo stato di bollettino e Osservatorio
+  writeFileSync(fileStato, JSON.stringify(stato));
+  console.log('Pubblicati bollettino e Osservatorio; livelli ARPAV non aggiornati.');
+  process.exit(0);
+}
 
 const puoInviare = DRY || (TOKEN && CHAT);
 if (!puoInviare) console.log('::warning::Mancano i segreti TELEGRAM_BOT_TOKEN e TELEGRAM_CHAT_ID: nessun avviso inviato.');
