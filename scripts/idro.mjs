@@ -40,7 +40,12 @@ async function scarica() {
       return t;
     } catch (e) { errore = e; await new Promise(r => setTimeout(r, 4000)); }
   }
-  throw errore;
+  // ultimo tentativo con curl: attesa di connessione più lunga (fetch di Node si arrende dopo 10 secondi)
+  try {
+    const t = execFileSync('curl', ['-sS', '-L', '--fail', '--connect-timeout', '40', '--max-time', '90', '--retry', '3', '--retry-delay', '5', '--retry-all-errors', '-A', 'idrometria-protezione-civile-curtarolo', SORGENTE], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+    if (!/<SENSORE>/.test(t)) throw new Error('risposta non valida');
+    return t;
+  } catch (e) { throw errore || e; }
 }
 
 function sensore(xml, id) {
@@ -220,7 +225,13 @@ async function osservatorio(c) {
   return out;
 }
 
-const xml = await scarica();
+let xml;
+try { xml = await scarica(); } catch (e) {
+  // ARPAV a volte non è raggiungibile dai server di GitHub: non è un errore del programma.
+  // Si esce senza errore: restano pubblicati gli ultimi dati buoni e la prossima esecuzione (dopo 10 minuti) riprova.
+  console.log('::warning::ARPAV non raggiungibile, dati non aggiornati in questa esecuzione: ' + (e && e.cause && e.cause.code ? e.cause.code : (e && e.message) || e));
+  process.exit(0);
+}
 const dati = leggi(xml);
 mkdirSync(OUT, { recursive: true });
 const fileStato = `${OUT}/state.json`;
