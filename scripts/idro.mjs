@@ -322,6 +322,72 @@ for (const s of cfg.stazioni.filter(x => x.allerta)) {
     if (sogliaPrec == null || v < sogliaPrec - (cfg.isteresi ?? 0.05)) stato[s.id] = liv;   // rientrata: si riarma l'avviso
   }
 }
+// ---- Previsione per Limena: stessa stima dell'app (variazione osservata a Barzizza riportata a Limena con tempo di viaggio e coefficiente).
+// Il tempo di viaggio e il coefficiente si leggono dalle impostazioni dell'app (Firestore, impostazioni/idrometria); in prova si possono passare con IDRO_LAG e IDRO_K.
+const ID_MONTE_P = '300005751', ID_RIF_P = '300005777';
+const oraPrev = ms => { const o = oraLocale(ms), [hm, giorno] = o.split(' del '); return giorno === oraLocale(Date.now()).split(' del ')[1] ? hm : `${hm} del ${giorno.slice(0, 5)}`; };
+async function calcolaPrevisione() {
+  let lag = parseFloat(process.env.IDRO_LAG || ''), k = parseFloat(process.env.IDRO_K || '');
+  if (!(lag > 0) && pushAttivo) {
+    try { const imp = await leggiCollezione('impostazioni'), c = imp && (imp.find(x => x.id === 'idrometria') || {}).campi; if (c) { lag = Number(c.lag); k = Number(c.k); } }
+    catch (e) { console.log('::warning::Impostazioni della stima non lette: ' + e.message); }
+  }
+  if (!(lag > 0)) { console.log('Previsione: tempo di viaggio non impostato nell\'app, nessuna previsione.'); return null; }
+  if (!(k > 0)) k = 1;
+  const L = dati.st[ID_RIF_P], B = dati.st[ID_MONTE_P];
+  if (!L || !B || !L.dati.length || !B.dati.length) return null;
+  const [tl, vl] = L.dati[L.dati.length - 1], lagMs = lag * 3600000;
+  if (Date.now() - tl > 90 * 60000 || Date.now() - B.dati[B.dati.length - 1][0] > 90 * 60000) return null;   // dati non aggiornati: nessuna previsione
+  let base = null; for (const x of B.dati) if (x[0] <= tl - lagMs) base = x;
+  if (!base) return null;
+  const serie = B.dati.filter(x => x[0] > tl - lagMs).map(([tt, v]) => ({ t: tt + lagMs, v: Math.max(0, vl + k * (v - base[1])) })).filter(x => x.t > tl);
+  if (!serie.length) return null;
+  let picco = serie[0]; serie.forEach(x => { if (x.v > picco.v) picco = x; });
+  const soglie = (L.g || []).map((g, i) => g == null ? null : { i: i + 1, g, quando: (serie.find(x => x.v >= g) || {}).t || null }).filter(Boolean);
+  return { lag, k, tl, vl, picco, soglie, g: L.g, fino: serie[serie.length - 1].t, aumento: picco.v - vl };
+}
+let previsione = null;
+if (!PROVA && !PROVA_PUSH) {
+  try {
+    previsione = await calcolaPrevisione();
+    const P = previsione;
+    stato.prev = stato.prev && typeof stato.prev === 'object' ? stato.prev : {};
+    if (P) {
+      const isteresi = cfg.isteresi ?? 0.05, ora = Date.now();
+      // per la verifica a posteriori si tengono la prima e l'ultima previsione di un aumento significativo (le scrive il registro eventi)
+      if (P.aumento >= 0.10) { const f = { fattaAlle: ora, v: Math.round(P.picco.v * 100) / 100, t: P.picco.t }; stato.prevUltima = f; if (!stato.prevPrima) stato.prevPrima = f; }
+      else if (!stato.episodio) { stato.prevPrima = null; stato.prevUltima = null; }
+      // soglie che la stima prevede di superare e che a Limena non sono ancora state superate
+      const attese = P.soglie.filter(s => s.quando && P.vl < s.g);
+      const livTg = Math.max(0, ...attese.filter(s => s.i >= 2).map(s => s.i));
+      const livPush = Math.max(0, ...attese.filter(s => s.quando - ora <= 3 * 3600000).map(s => s.i));
+      const riarma = (chiave, liv) => { const s = stato.prev[chiave]; if (liv < s) { const g = P.g[s - 1]; if (g == null || P.picco.v < g - isteresi || P.vl >= g) stato.prev[chiave] = liv; } };
+      const puoInviarePrev = DRY || (TOKEN && CHAT);
+      if (livTg > (stato.prev.tg || 0)) {
+        if (puoInviarePrev) {
+          const elenco = attese.filter(s => s.i >= 2).map(s => `🕒 Guardia ${s.i} (${m2(s.g)}): verso le <b>${oraPrev(s.quando)}</b>`).join('\n');
+          const nomi = attese.filter(s => s.i >= 2).map(s => 'G' + s.i).join(' e ');
+          const testo = `⚠️ <b>PREVISIONE IDROMETRICA · Limena potrebbe superare ${nomi}</b>\n` +
+            `📍 Brenta a Limena (Curtarolo): ora <b>${m2(P.vl)}</b>\n` +
+            `📈 Picco stimato: <b>${m2(P.picco.v)}</b> verso le <b>${oraPrev(P.picco.t)}</b> (+${Math.round(P.aumento * 100)} cm)\n${elenco}\n` +
+            `<i>Stima dai livelli già misurati a Barzizza (tempo di viaggio ${String(P.lag).replace('.', ',')} h): indicativa, non considera la pioggia in arrivo. Fonte ARPAV, dati non validati.</i>`;
+          if (await telegram(testo)) stato.prev.tg = livTg; else problemi++;
+        }
+      } else riarma('tg', livTg);
+      if (livPush > (stato.prev.push || 0)) {
+        if (pushAttivo) {
+          const s = attese.filter(x => x.quando - ora <= 3 * 3600000).sort((a, b) => b.i - a.i)[0];
+          try {
+            const e = await inviaPush({ titolo: `Previsione: Limena potrebbe superare G${s.i}`, testo: `Verso le ${oraPrev(s.quando)} · picco stimato ${m2(P.picco.v)} (ora ${m2(P.vl)})`, tag: `idro-prev-${s.i}`, icona: '📈' });
+            console.log(`Push previsione G${s.i}: ${e.inviati}/${e.dispositivi} dispositivi`);
+            stato.prev.push = livPush;
+          } catch (e) { console.log('::error::Push di previsione non inviato: ' + e.message); problemi++; }
+        }
+      } else riarma('push', livPush);
+      console.log(`Previsione Limena: ora ${m2(P.vl)}, picco stimato ${m2(P.picco.v)} alle ${oraPrev(P.picco.t)}; soglie attese: ${attese.map(s => 'G' + s.i + '@' + oraPrev(s.quando)).join(', ') || 'nessuna'}`);
+    }
+  } catch (e) { console.log('::warning::Previsione non calcolata: ' + (e && e.message ? e.message : e)); }
+}
 // ---- Registro automatico degli eventi di piena (Firestore, raccolta idro_eventi): picchi e orari dei passaggi di soglia a Barzizza e Limena,
 // con il tempo di viaggio osservato tra i due picchi. Un evento si apre quando una delle due stazioni supera G1 e si chiude dopo 6 ore sotto G1.
 async function registroEpisodi() {
@@ -335,6 +401,8 @@ async function registroEpisodi() {
     const inizio = Math.min(...cand);
     ep = { id: new Date(inizio).toISOString().slice(0, 16).replace(/[-:T]/g, ''), inizio, fine: null, ultimoSopra: inizio, st: {} };
   }
+  if (stato.prevPrima && !ep.prima) ep.prima = stato.prevPrima;
+  if (stato.prevUltima) ep.ultima = stato.prevUltima;
   for (const [id, nome] of ST) {
     const d = dd[id], da = ep.inizio - 12 * 3600000;
     if (!ep.st[id]) ep.st[id] = { nome, max: null, base: Math.min(...d.serie.filter(([t]) => t >= da && t <= ep.inizio + 3600000).map(([, v]) => v), ...d.serie.map(([, v]) => v).slice(0, 1)), soglie: {} };
@@ -349,11 +417,11 @@ async function registroEpisodi() {
     ep.fine = ep.ultimoSopra;
     const b = ep.st[ID_MONTE], l = ep.st[ID_RIF], h = (l.max.t - b.max.t) / 3600000, sB = b.max.v - b.base, sL = l.max.v - l.base;
     if (sB >= 0.3 && sL >= 0.3 && h >= 0.5 && h <= 24) { ep.ritardoOre = Math.round(h * 10) / 10; ep.kStima = Math.round(sL / sB * 100) / 100; }
-    stato.episodio = null; stato.episodioFine = ep.fine;
+    stato.episodio = null; stato.episodioFine = ep.fine; stato.prevPrima = null; stato.prevUltima = null;
   } else stato.episodio = ep;
   const iso = t => (t == null ? null : new Date(t).toISOString());
   const stz = Object.fromEntries(Object.entries(ep.st).map(([id, e]) => [id, { nome: e.nome, max: e.max && { v: e.max.v, t: iso(e.max.t) }, base: e.base, soglie: Object.fromEntries(Object.entries(e.soglie).map(([i, x]) => [i, { v: x.v, t: iso(x.t) }])) }]));
-  const doc = { id: ep.id, inizio: iso(ep.inizio), fine: iso(ep.fine), aperto: !ep.fine, stazioni: stz, ritardoOre: ep.ritardoOre ?? null, kStima: ep.kStima ?? null, aggiornato: new Date().toISOString() };
+  const doc = { id: ep.id, inizio: iso(ep.inizio), fine: iso(ep.fine), aperto: !ep.fine, stazioni: stz, ritardoOre: ep.ritardoOre ?? null, kStima: ep.kStima ?? null, previsione: ep.prima ? { prima: { fattaAlle: iso(ep.prima.fattaAlle), v: ep.prima.v, t: iso(ep.prima.t) }, ultima: ep.ultima ? { fattaAlle: iso(ep.ultima.fattaAlle), v: ep.ultima.v, t: iso(ep.ultima.t) } : null } : null, aggiornato: new Date().toISOString() };
   const firma = JSON.stringify({ ...doc, aggiornato: 0 });
   if (stato.episodioScritto === ep.id + firma) return;
   if (pushAttivo) { await scriviDocumento('idro_eventi', ep.id, doc); console.log(`Registro eventi: ${ep.id} ${ep.fine ? 'chiuso' : 'aperto'}${ep.ritardoOre ? ', tempo di viaggio ' + ep.ritardoOre + ' h' : ''}`); }
